@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://workbench-license-beta.3473645620.workers.dev; img-src 'self' data:; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex,nofollow">
+  <title>序光 · 管理总端</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="./styles.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <header class="topbar"><a class="brand" href="./"><span class="brand-mark" aria-hidden="true">序</span><span>序光 <small>管理总端</small></span></a><span class="environment">朋友测试 · Beta</span></header>
+  <main>
+    <section id="login-view" class="login-layout">
+      <div class="intro"><p class="eyebrow">LUMAFLOW / ADMINISTRATION</p><h1>每一份邀请，<br>都在你的掌握中。</h1><p>在一个地方管理工作台的邀请、设备资格和使用期限。</p><div class="intro-note"><span class="dot"></span> 沿用现有授权服务，直接管理已分发的测试版。</div></div>
+      <form id="login-form" class="login-panel">
+        <p class="eyebrow">管理员入口</p><h2>进入管理总端</h2>
+        <label for="admin-token">管理员密钥</label>
+        <input id="admin-token" name="admin-token" type="password" autocomplete="off" spellcheck="false" required placeholder="粘贴管理员密钥" maxlength="512">
+        <p class="field-help">密钥只用于本次连接。刷新页面或退出后需重新输入。</p>
+        <button class="primary" id="login-button" type="submit">连接工作台</button>
+        <p id="login-error" class="error" role="alert"></p>
+        <details><summary>如何取得管理员密钥？</summary><p>在发布者电脑使用「打开序光管理总端」快捷入口，可复制现有密钥。密钥来自本机授权服务配置，请勿发给测试用户。</p></details>
+      </form>
+    </section>
+    <section id="console-view" hidden>
+      <div class="page-heading"><div><p class="eyebrow">WORKBENCH CONTROL</p><h1>邀请与设备管理</h1><p>授权变更会在设备下次联网验证时生效，普通测试资格可离线使用最多 72 小时。</p></div><div class="heading-actions"><button id="refresh-button">刷新数据</button><button id="logout-button" class="quiet">退出管理</button></div></div>
+      <div id="notice" class="notice" role="status" hidden></div>
+      <dl class="metrics"><div><dt>有效设备</dt><dd id="active-count">—</dd></div><div><dt>7 天内到期</dt><dd id="expiring-count">—</dd></div><div><dt>有效邀请码</dt><dd id="invite-count">—</dd></div><div class="metric-detail"><dt>数据更新</dt><dd id="updated-at">尚未加载</dd></div></dl>
+      <div class="toolbar"><div class="tabs" role="tablist" aria-label="管理内容"><button id="devices-tab" role="tab" aria-selected="true" aria-controls="devices-panel">设备授权</button><button id="invites-tab" role="tab" aria-selected="false" aria-controls="invites-panel" tabindex="-1">邀请码</button></div><button id="new-invite-button" class="primary">＋ 创建邀请码</button></div>
+      <div class="filterbar"><label class="search-label" for="search-input">搜索<input id="search-input" type="search" placeholder="搜索备注、设备或授权编号" autocomplete="off"></label><label for="status-filter">状态<select id="status-filter"><option value="all">全部状态</option><option value="active">有效</option><option value="expiring">即将到期</option><option value="expired">已到期</option><option value="revoked">已停用</option></select></label><span id="result-count"></span></div>
+      <section id="devices-panel" role="tabpanel" aria-labelledby="devices-tab" tabindex="0"><div class="table-scroll"><table><caption class="sr-only">设备授权列表</caption><thead><tr><th>设备 / 备注</th><th>状态</th><th>资格类型</th><th>到期时间</th><th>最近验证</th><th>管理</th></tr></thead><tbody id="devices-body"></tbody></table></div></section>
+      <section id="invites-panel" role="tabpanel" aria-labelledby="invites-tab" tabindex="0" hidden><div class="table-scroll"><table><caption class="sr-only">邀请码列表</caption><thead><tr><th>邀请备注 / 编号</th><th>状态</th><th>使用期限</th><th>已用 / 上限</th><th>创建时间</th><th>管理</th></tr></thead><tbody id="invites-body"></tbody></table></div></section>
+      <p class="table-note">每类列表显示最近 200 条。这里管理的是设备使用资格；邀请码备注可用于辨认用户，不包含同步账号和学习内容。</p>
+    </section>
+  </main>
+  <footer><span>序光 LumaFlow</span><span>让学习有序，让进步有光。</span></footer>
+  <dialog id="create-dialog"><form id="create-form"><div class="dialog-heading"><h2>创建邀请码</h2><button class="quiet" type="button" data-close="create-dialog" aria-label="关闭创建窗口">关闭</button></div><p>建议每位朋友使用独立邀请码，方便后续管理。</p><label for="invite-note">用户备注</label><input id="invite-note" maxlength="200" placeholder="例如：小陈 · 第一批测试" required><div class="form-grid"><div><label for="invite-days">使用天数</label><input id="invite-days" type="number" min="1" max="365" step="1" value="7" required></div><div><label for="invite-max">最多设备数</label><input id="invite-max" type="number" min="1" max="1000" step="1" value="1" required></div></div><p class="field-help">期限从每台设备首次激活时起算。邀请码明文只会返回一次。</p><p id="create-error" class="error" role="alert"></p><button id="create-submit" class="primary" type="submit">生成邀请码</button></form></dialog>
+  <dialog id="code-dialog"><div class="dialog-heading"><h2>邀请码已生成</h2><button type="button" class="quiet" data-close="code-dialog">关闭</button></div><p>请现在复制并保存。关闭后，列表中无法找回邀请码明文。</p><label for="created-code">邀请码</label><input id="created-code" readonly autocomplete="off" spellcheck="false"><p id="created-description"></p><button id="copy-code" class="primary">复制邀请码</button><p id="copy-status" role="status"></p></dialog>
+  <dialog id="extend-dialog"><form id="extend-form"><div class="dialog-heading"><h2>延长设备授权</h2><button class="quiet" type="button" data-close="extend-dialog">关闭</button></div><p id="extend-description"></p><label for="extend-days">增加天数</label><input id="extend-days" type="number" min="1" max="365" step="1" value="7" required><p class="field-help">有效授权从原到期日顺延；已到期授权从当前时间重新计算。</p><p id="extend-error" class="error" role="alert"></p><button id="extend-submit" class="primary" type="submit">确认延期</button></form></dialog>
+</body>
+</html>
