@@ -1,12 +1,12 @@
 {
   "name": "序光",
   "short_name": "序光",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "start_url": "./#/today",
   "scope": "./",
   "display": "standalone",
   "background_color": "#fff7fa",
-  "theme_color": "#172d69",
+  "theme_color": "#E7F2FB",
   "icons": [
     {
       "src": "./icon-192.png",
