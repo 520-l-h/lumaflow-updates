@@ -39,7 +39,7 @@ async function request(path, data = {}) {
   try {
     const response = await fetch(`${API}/api/admin/${path}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-license-admin-token': token }, body: JSON.stringify(data), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: controller.signal })
     const result = await response.json()
-    if (!response.ok) { const error = new Error(errors[result.error] ?? `操作失败（${response.status}），请稍后重试。`); error.code = result.error; if (response.status === 401 && current === generation) { logout(); $('login-error').textContent = error.message } throw error }
+    if (!response.ok) { const error = new Error(errors[result.error] ?? `操作失败（${response.status}），请稍后重试。`); error.code = result.error; error.uncertain = response.status >= 500; if (response.status === 401 && current === generation) { logout(); $('login-error').textContent = error.message } throw error }
     return result
   } finally { clearTimeout(timeout); controllers.delete(controller) }
 }
@@ -261,7 +261,7 @@ $('bulk-form').addEventListener('submit', async event => {
       if (current !== generation) return
       const data = { id: row.id, ...(action === 'extend' ? { days } : action === 'policy' ? { policy: preset === 'inherit' ? null : presets[preset], note: row.note ?? '' } : {}) }
       try { await request(`entitlements/${action === 'policy' ? 'update' : action}`, data); if (current !== generation) return; selected.delete(row.id); result.push({ name: row.note || row.installation_id, ok: true }) }
-      catch (error) { if (current !== generation) return; result.push({ name: row.note || row.installation_id, ok: false, error: message(error) }); if (!error.code) { result.push({ name: '其余设备', ok: false, error: '因网络或响应异常已暂停。刚才设备的结果需待同步确认，尤其不要直接重复延期。' }); break } }
+      catch (error) { if (current !== generation) return; result.push({ name: row.note || row.installation_id, ok: false, error: message(error) }); if (typeof error.code !== 'string' || error.uncertain) { if (rows.indexOf(row) < rows.length - 1) result.push({ name: '其余设备', ok: false, error: '因网络或响应异常已暂停。刚才设备的结果需待同步确认，尤其不要直接重复延期。' }); break } }
     }
     if (current !== generation) return
     $('bulk-dialog').close()
