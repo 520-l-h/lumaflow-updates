@@ -10,7 +10,8 @@
   <title>序光 · 管理总端</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="./styles.css?v=20261023.2">
-  <script type="module" src="./app.js?v=20261023.2"></script>
+  <script defer src="./bootstrap.js?v=20261023.3"></script>
+  <script id="admin-module" type="module" src="./app.js?v=20261023.3"></script>
 </head>
 <body>
   <header class="topbar"><a class="brand" href="./"><span class="brand-mark" aria-hidden="true">序</span><span>序光 <small>管理总端</small></span></a><span class="environment">朋友测试 · Beta</span></header>
@@ -20,10 +21,13 @@
       <form id="login-form" class="login-panel">
         <p class="eyebrow">管理员入口</p><h2>进入管理总端</h2>
         <label for="admin-token">管理员密钥</label>
-        <input id="admin-token" name="admin-token" type="password" autocomplete="off" spellcheck="false" required placeholder="粘贴管理员密钥" maxlength="512">
+        <input id="admin-token" type="password" autocomplete="off" spellcheck="false" required placeholder="粘贴管理员密钥" maxlength="512">
         <label class="check-row"><input id="remember-session" type="checkbox">在本标签页保持登录 8 小时</label>
         <p class="field-help">勾选后刷新免重输；仅保存在本标签页会话中，退出即清除。不勾选则只在当前页面内存使用。</p>
-        <button class="primary" id="login-button" type="submit">连接工作台</button>
+        <p id="startup-status" class="field-help" role="status">正在加载管理功能，请稍候。若长时间没有完成，请使用下方入口重新加载。</p>
+        <a id="reload-admin" href="./?reload=20261023.3" class="field-help">重新加载管理页</a>
+        <noscript><p class="error">浏览器禁用了 JavaScript，请允许此网站运行 JavaScript，再重新打开管理页。</p></noscript>
+        <button class="primary" id="login-button" type="submit" disabled>正在加载管理功能…</button>
         <p id="login-error" class="error" role="alert"></p>
         <details><summary>如何取得管理员密钥？</summary><p>在发布者电脑使用「打开序光管理总端」快捷入口，可复制现有密钥。密钥来自本机授权服务配置，请勿发给测试用户。</p></details>
       </form>

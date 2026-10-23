@@ -296,4 +296,10 @@ async function restoreSession() {
   $('login-view').hidden = true; $('console-view').hidden = false; $('sync-status').textContent = '正在恢复本标签页登录并同步…'
   await synchronize(true)
 }
+document.documentElement.dataset.adminReady = 'true'
+$('startup-status').textContent = '管理功能已就绪，可以连接。'
+$('reload-admin').hidden = true
+$('login-button').disabled = false
+$('login-button').textContent = '连接工作台'
+window.dispatchEvent(new Event('admin-ready'))
 void restoreSession()
