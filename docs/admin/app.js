@@ -1,4 +1,5 @@
-const API = 'https://workbench-license-beta.3473645620.workers.dev'
+const ENDPOINTS = ['https://lumaflow-license-connectivity.pages.dev', 'https://workbench-license-beta.3473645620.workers.dev']
+let API = ENDPOINTS[0]
 const $ = id => document.getElementById(id)
 let token = '', generation = 0, pending = false, activeTab = 'devices', target = null
 let invites = [], devices = [], updatedAt = null, editTarget = null
@@ -12,12 +13,13 @@ const policyText = policy => `离线 ${policy.offlineHours} 小时 · ${policy.f
 const date = value => value && Number.isFinite(Date.parse(value)) ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Shanghai' }).format(new Date(value)) : '—'
 const inviteFor = device => invites.find(invite => invite.id === device.invite_id)
 const inviteStatus = invite => invite.status !== 'active' ? 'revoked' : invite.activation_expires_at && Date.parse(invite.activation_expires_at) <= Date.now() ? 'expired' : 'active'
-const deviceStatus = device => device.status !== 'active' || (device.type !== 'owner' && (device.invite_status ?? inviteFor(device)?.status) === 'revoked') ? 'revoked' : device.type === 'owner' ? 'active' : Date.parse(device.expires_at) <= Date.now() ? 'expired' : Date.parse(device.expires_at) - Date.now() <= 7 * 86400000 ? 'expiring' : 'active'
+const deviceStatus = device => device.status !== 'active' || (device.type !== 'owner' && (device.invite_status ?? inviteFor(device)?.status) === 'revoked') ? 'revoked' : device.type === 'owner' || device.permanent ? 'active' : Date.parse(device.expires_at) <= Date.now() ? 'expired' : Date.parse(device.expires_at) - Date.now() <= 7 * 86400000 ? 'expiring' : 'active'
 const labels = { active: '有效', expiring: '即将到期', expired: '已到期', revoked: '已停用' }
 const errors = { unauthorized: '管理员密钥无效，请重新输入。', 'origin-not-allowed': '当前网页地址未被授权，请使用正式管理网址。', 'invalid-input': '输入不符合要求，请检查天数、设备数和备注。', 'not-found': '记录不存在或已停用，请刷新后重试。', 'owner-does-not-expire': '机主资格没有到期日，无需延期。', 'server-error': '授权服务暂时不可用，请稍后重试。', 'server-unconfigured': '授权服务配置不完整，请检查服务端配置。' }
 function notice(message, error = false) { $('notice').textContent = message; $('notice').className = error ? 'notice error' : 'notice'; $('notice').hidden = !message }
 Object.assign(errors, { 'owner-protected': '机主设备受保护，不能在这里停用或收回功能。', 'quota-below-used': '设备上限不能少于已激活的数量，请提高上限后保存。', 'not-found': '记录不存在或状态已变化，列表将自动同步，请重新选择。' })
-function busy(value) { pending = value; for (const button of document.querySelectorAll('#console-view button, dialog button, dialog input, dialog select, #devices-body input, #select-visible')) button.disabled = value; $('logout-button').disabled = false; if (!value) { updateInheritedPolicy(); updateSelection() } }
+Object.assign(errors, { 'permanent-does-not-expire': '该设备已是永久授权，无需延期。', 'inactive-license': '请先恢复设备及其邀请码，再授予永久使用。' })
+function busy(value) { pending = value; for (const button of document.querySelectorAll('#console-view button, dialog button, dialog input, dialog select, #devices-body input, #select-visible')) button.disabled = value; $('logout-button').disabled = false; if (!value) { updateInheritedPolicy(); updateSelection(); if ($('invite-permanent')) $('invite-days').disabled = $('invite-permanent').checked } }
 function logout(preserveSession = false) {
   for (const controller of controllers) controller.abort()
   controllers.clear(); loading = null; selected.clear(); sessionExpires = 0; refreshFailures = 0
@@ -34,14 +36,26 @@ async function request(path, data = {}) {
   if (!path.endsWith('/list') && loading) await loading.catch(() => undefined)
   if (startedGeneration !== generation) throw new Error('登录状态已改变，已取消原操作。')
   if (!token || (sessionExpires && Date.now() >= sessionExpires)) { logout(); const error = new Error('登录已到期，请重新输入管理员密钥。'); error.code = 'unauthorized'; $('login-error').textContent = error.message; throw error }
-  const current = generation, controller = new AbortController(); controllers.add(controller)
-  const timeout = setTimeout(() => controller.abort(), 15000)
-  try {
-    const response = await fetch(`${API}/api/admin/${path}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-license-admin-token': token }, body: JSON.stringify(data), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', signal: controller.signal })
-    const result = await response.json()
-    if (!response.ok) { const error = new Error(errors[result.error] ?? `操作失败（${response.status}），请稍后重试。`); error.code = result.error; error.uncertain = response.status >= 500; if (response.status === 401 && current === generation) { logout(); $('login-error').textContent = error.message } throw error }
-    return result
-  } finally { clearTimeout(timeout); controllers.delete(controller) }
+  const current = generation, readOnly = path.endsWith('/list'), endpoints = readOnly ? [API, ...ENDPOINTS.filter(origin => origin !== API)] : [API]
+  let lastError
+  for (const endpoint of endpoints) {
+    if (current !== generation || !token) throw new Error('登录状态已改变，原请求已取消。')
+    const controller = new AbortController(); controllers.add(controller)
+    const timeout = setTimeout(() => controller.abort(), 10000)
+    try {
+      const response = await fetch(`${endpoint}/api/admin/${path}`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-license-admin-token': token }, body: JSON.stringify(data), cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer', redirect: 'error', signal: controller.signal })
+      const result = await response.json()
+      if (!response.ok) { const error = new Error(errors[result.error] ?? `操作失败（${response.status}），请稍后重试。`); error.code = result.error; error.uncertain = response.status >= 500; error.retryRead = response.status >= 500 || response.status === 404; if (response.status === 401 && current === generation) { logout(); $('login-error').textContent = error.message } throw error }
+      if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('授权服务响应无效，请稍后重新连接。')
+      if (current !== generation || !token) throw new Error('登录状态已改变，原请求已取消。')
+      if (readOnly) API = endpoint
+      return result
+    } catch (error) {
+      lastError = error
+      if (!readOnly || current !== generation || (typeof error.code === 'string' && !error.retryRead)) throw error
+    } finally { clearTimeout(timeout); controllers.delete(controller) }
+  }
+  throw lastError
 }
 const message = error => error.name === 'TimeoutError' || error.name === 'AbortError' ? '请求超时。列表将自动同步确认结果，请勿重复提交刚才的更改。' : error instanceof TypeError ? '无法连接授权服务，请检查网络。恢复后将自动同步，请勿重复提交刚才的更改。' : error.message
 async function reload() {
@@ -90,11 +104,12 @@ function render() {
     if (device.type !== 'owner') { const input = document.createElement('input'); input.type = 'checkbox'; input.className = 'device-select'; input.dataset.deviceId = device.id; input.checked = selected.has(device.id); input.disabled = pending; input.setAttribute('aria-label', `选择设备 ${device.note || inviteFor(device)?.note || device.installation_id}`); input.addEventListener('change', () => { input.checked ? selected.add(device.id) : selected.delete(device.id); updateSelection() }); row.cells[0].prepend(input) }
     const detail = document.createElement('span'); detail.className = 'policy-summary'; detail.textContent = device.type === 'owner' ? '全部功能 · 离线不限时' : policyText(device.policy ?? defaultPolicy()); row.cells[0].append(detail)
     if (device.protocol_version === 1) { const warning = document.createElement('span'); warning.className = 'policy-summary legacy'; warning.textContent = '旧版客户端 · 请升级以执行新权限规则'; row.cells[0].append(warning) }
-    badgeCell(row, status); textCell(row, device.type === 'owner' ? '机主 · 永久' : '朋友测试'); textCell(row, device.type === 'owner' ? '永久有效' : date(device.expires_at)); textCell(row, date(device.last_verified_at))
+    badgeCell(row, status); textCell(row, device.type === 'owner' ? '机主 · 永久' : device.permanent ? '永久授权' : '朋友测试'); textCell(row, device.type === 'owner' || device.permanent ? '永久有效' : date(device.expires_at)); textCell(row, date(device.last_verified_at))
     const cell = row.insertCell(); cell.className = 'row-actions'
     action(cell, '详情', () => openDevice(device))
-    if (device.status === 'active' && status !== 'revoked' && device.type !== 'owner') action(cell, '延期', () => openExtend(device))
+    if (device.status === 'active' && status !== 'revoked' && device.type !== 'owner' && !device.permanent) action(cell, '延期', () => openExtend(device))
     if (device.type !== 'owner') {
+      if (!device.permanent && device.status === 'active' && status !== 'revoked') action(cell, '设为永久', () => grantPermanent(device))
       action(cell, '权限', () => openPolicy('entitlements', device))
       if (device.status === 'active') action(cell, '停用', () => revoke('entitlements', device.id, device.note || inviteFor(device)?.note || device.installation_id), true)
       else action(cell, '恢复', () => restore('entitlements', device.id))
@@ -102,7 +117,7 @@ function render() {
   }
   for (const invite of inviteRows) {
     const row = $('invites-body').insertRow()
-    nameCell(row, invite.note || '未备注的邀请', invite.id); badgeCell(row, inviteStatus(invite)); textCell(row, `${invite.duration_days} 天`); textCell(row, `${invite.activation_count} / ${invite.max_activations}`); textCell(row, date(invite.created_at))
+    nameCell(row, invite.note || '未备注的邀请', invite.id); badgeCell(row, inviteStatus(invite)); textCell(row, invite.permanent ? '永久使用' : `${invite.duration_days} 天`); textCell(row, `${invite.activation_count} / ${invite.max_activations}`); textCell(row, date(invite.created_at))
     const detail = document.createElement('span'); detail.className = 'policy-summary'; detail.textContent = `${policyText(invite.policy ?? defaultPolicy())} · 激活截止：${invite.activation_expires_at ? date(invite.activation_expires_at) : '不限'}`; row.cells[0].append(detail)
     const cell = row.insertCell()
     action(cell, '设置', () => openPolicy('invites', invite))
@@ -130,6 +145,10 @@ async function revoke(kind, id, name) {
   if (!window.confirm(`确认${kind === 'invites' ? '暂停邀请' : '停用设备'}「${name}」？\n\n${description}\n\n联网设备每 15 分钟核验；离线设备最迟在现有离线授权到期后停止。可在管理端恢复。`)) return
   await perform(`${kind}/revoke`, { id }, '已提交停用，设备下次联网验证时生效。')
 }
+async function grantPermanent(device) {
+  if (!window.confirm(`将「${device.note || inviteFor(device)?.note || device.installation_id}」设为永久使用？\n\n设备编号：${device.installation_id}\n\n不设使用到期日，仍按离线额度联网核验；你仍可调整权限、停用和恢复。这不是机主资格。`)) return
+  await perform('entitlements/grant-permanent', { id: device.id, installationId: device.installation_id }, '已设为永久使用。请让对方联网重新验证；你仍可停用、恢复及调整权限。')
+}
 function openExtend(device) { target = device; $('extend-description').textContent = `${inviteFor(device)?.note || '该设备'} · 当前到期：${date(device.expires_at)}`; $('extend-days').value = '7'; $('extend-error').textContent = ''; $('extend-dialog').showModal() }
 async function restore(kind, id) { await perform(`${kind}/restore`, { id }, '已恢复。设备联网核验后领取授权；单独停用的设备仍需单独恢复。') }
 function localDateValue(value) { if (!value) return ''; const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16) }
@@ -147,6 +166,7 @@ function openPolicy(kind, row) {
   $('policy-invite-fields').hidden = kind !== 'invites'; $('policy-max').value = row.max_activations ?? 1
   $('policy-max').min = Math.max(1, row.activation_count ?? 0)
   $('policy-expiry').value = localDateValue(row.activation_expires_at); $('policy-error').textContent = ''; updateInheritedPolicy(); $('policy-dialog').showModal()
+  $('policy-permanent').checked = Boolean(row.permanent)
   $('policy-preset').value = 'custom'
 }
 $('policy-inherit').addEventListener('change', updateInheritedPolicy)
@@ -154,7 +174,7 @@ $('policy-form').addEventListener('submit', async event => {
   event.preventDefault(); if (pending || !editTarget) return
   const { kind, row } = editTarget, current = generation
   const policy = kind === 'entitlements' && $('policy-inherit').checked ? null : { offlineHours: Number($('policy-hours').value), features: [...document.querySelectorAll('#policy-features input:checked')].map(input => input.value) }
-  const data = { id: row.id, policy, note: $('policy-note').value.trim(), ...(kind === 'invites' ? { maxActivations: Number($('policy-max').value), activationExpiresAt: $('policy-expiry').value ? new Date($('policy-expiry').value).toISOString() : null } : {}) }
+  const data = { id: row.id, policy, note: $('policy-note').value.trim(), ...(kind === 'invites' ? { permanent: $('policy-permanent').checked, maxActivations: Number($('policy-max').value), activationExpiresAt: $('policy-expiry').value ? new Date($('policy-expiry').value).toISOString() : null } : {}) }
   busy(true); $('policy-error').textContent = ''
   try { await request(`${kind}/update`, data); if (current !== generation) return; $('policy-dialog').close(); const success = '设置已保存。设备下次联网核验时生效；已有离线授权在其原期限内继续有效。'; try { await reload(); if (current === generation) notice(success) } catch (error) { if (current === generation) { notice(`${success} 列表暂未同步，将自动重试。${message(error)}`, true); nextRefresh = 0 } } }
   catch (error) { if (current === generation) { if (error.code === 'unauthorized') { logout(); $('login-error').textContent = message(error) } else $('policy-error').textContent = message(error) } }
@@ -165,7 +185,7 @@ $('audit-button').addEventListener('click', async () => {
   try {
     const { events } = await request('audit/list'); if (current !== generation) return
     $('audit-body').replaceChildren()
-    const actions = { 'invites.create': '创建邀请', 'invites.update': '修改邀请设置', 'invites.revoke': '暂停邀请', 'invites.restore': '恢复邀请', 'entitlements.update': '修改设备权限', 'entitlements.revoke': '停用设备', 'entitlements.restore': '恢复设备', 'entitlements.extend': '设备延期', 'entitlements.grant-owner': '授予机主资格' }
+    const actions = { 'invites.create': '创建邀请', 'invites.update': '修改邀请设置', 'invites.revoke': '暂停邀请', 'invites.restore': '恢复邀请', 'entitlements.update': '修改设备权限', 'entitlements.revoke': '停用设备', 'entitlements.restore': '恢复设备', 'entitlements.extend': '设备延期', 'entitlements.grant-owner': '授予机主资格', 'entitlements.grant-permanent': '授予永久使用' }
     for (const event of events) { const row = $('audit-body').insertRow(); textCell(row, date(event.created_at)); textCell(row, actions[event.action] ?? event.action); textCell(row, event.target_id); textCell(row, event.details_json) }
     if (!events.length) empty($('audit-body'), '还没有操作记录。')
     $('audit-dialog').showModal()
@@ -185,7 +205,7 @@ $('login-form').addEventListener('submit', async event => {
   event.preventDefault(); if ($('login-button').disabled) return
   const current = ++generation; token = $('admin-token').value.trim(); $('admin-token').value = ''; $('login-error').textContent = ''; $('login-button').disabled = true; $('login-button').textContent = '正在连接…'
   try { if (await reload()) { if ($('remember-session').checked) { sessionExpires = Date.now() + SESSION_MS; try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, expires: sessionExpires })) } catch { notice('已连接，但浏览器不允许保持登录；当前页面仍可使用。') } } $('login-view').hidden = true; $('console-view').hidden = false; switchTab('devices') } }
-  catch (error) { if (current === generation) { token = ''; $('login-error').textContent = message(error) } }
+  catch (error) { if (current === generation) { token = ''; $('login-error').textContent = typeof error.code === 'string' ? message(error) : '暂时无法连接授权服务，已尝试主、备用入口。请检查网络或系统代理后重新连接。' } }
   finally { $('login-button').disabled = false; $('login-button').textContent = '连接工作台' }
 })
 $('logout-button').addEventListener('click', () => logout())
@@ -197,10 +217,10 @@ $('new-invite-button').addEventListener('click', () => { $('create-form').reset(
 $('create-form').addEventListener('submit', async event => {
   event.preventDefault(); if (pending) return
   const current = generation, note = $('invite-note').value.trim(); if (!note) { $('create-error').textContent = '请输入用户备注。'; return }
-  const data = { note, days: Number($('invite-days').value), maxActivations: Number($('invite-max').value), policy: { offlineHours: Number($('create-hours').value), features: [...document.querySelectorAll('#create-features input:checked')].map(input => input.value) }, activationExpiresAt: $('create-expiry').value ? new Date($('create-expiry').value).toISOString() : null }; busy(true); $('create-error').textContent = ''
+  const data = { note, days: Number($('invite-days').value), permanent: $('invite-permanent').checked, maxActivations: Number($('invite-max').value), policy: { offlineHours: Number($('create-hours').value), features: [...document.querySelectorAll('#create-features input:checked')].map(input => input.value) }, activationExpiresAt: $('create-expiry').value ? new Date($('create-expiry').value).toISOString() : null }; busy(true); $('create-error').textContent = ''
   try {
     const result = await request('invites/create', data); if (current !== generation) return
-    $('create-dialog').close(); $('created-code').value = result.code; $('created-description').textContent = `${note} · ${data.days} 天 · 最多 ${data.maxActivations} 台设备`; $('copy-status').textContent = ''; $('code-dialog').showModal()
+    $('create-dialog').close(); $('created-code').value = result.code; $('created-description').textContent = `${note} · ${data.permanent ? '永久使用（仍按离线额度核验，可停用）' : `${data.days} 天`} · 最多 ${data.maxActivations} 台设备`; $('copy-status').textContent = ''; $('code-dialog').showModal()
     try { await reload() } catch (error) { if (current === generation) notice(`邀请码已生成，请先保存。列表刷新失败：${message(error)}`, true) }
   } catch (error) { if (current === generation) { if (error.code === 'unauthorized') { logout(); $('login-error').textContent = message(error) } else $('create-error').textContent = message(error) } }
   finally { if (current === generation) busy(false) }
@@ -233,13 +253,13 @@ $('clear-selection').addEventListener('click', () => { selected.clear(); render(
 function openDevice(device) {
   const invite = inviteFor(device), policy = device.policy ?? defaultPolicy()
   $('device-details').replaceChildren()
-  for (const [label, value] of [['设备编号', device.installation_id], ['授权编号', device.id], ['备注', device.note || invite?.note || '未备注'], ['状态', labels[deviceStatus(device)]], ['使用到期', device.type === 'owner' ? '机主永久有效' : date(device.expires_at)], ['最近联网核验', date(device.last_verified_at)], ['权限来源', device.type === 'owner' ? '机主保护' : device.policyInherited === false ? '单设备设置' : '跟随邀请码'], ['下次核验领取', device.type === 'owner' ? '全部功能，离线不限时' : policyText(policy)], ['关联邀请', invite?.note || device.invite_id], ['客户端协议', device.protocol_version === 2 ? '支持当前权限规则' : '旧协议或未记录，请先更新客户端']]) {
+  for (const [label, value] of [['设备编号', device.installation_id], ['授权编号', device.id], ['备注', device.note || invite?.note || '未备注'], ['状态', labels[deviceStatus(device)]], ['使用到期', device.type === 'owner' ? '机主永久有效' : device.permanent ? '永久使用（可停用）' : date(device.expires_at)], ['最近联网核验', date(device.last_verified_at)], ['权限来源', device.type === 'owner' ? '机主保护' : device.policyInherited === false ? '单设备设置' : '跟随邀请码'], ['下次核验领取', device.type === 'owner' ? '全部功能，离线不限时' : policyText(policy)], ['关联邀请', invite?.note || device.invite_id], ['客户端协议', device.protocol_version === 2 ? '支持当前权限规则' : '旧协议或未记录，请先更新客户端']]) {
     const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; $('device-details').append(term, detail)
   }
   $('device-dialog').showModal()
 }
 function openBulk(action) {
-  const rows = devices.filter(row => selected.has(row.id) && row.type !== 'owner' && (action === 'restore' ? row.status !== 'active' : action === 'extend' ? row.status === 'active' && deviceStatus(row) !== 'revoked' : action === 'revoke' ? row.status === 'active' : true))
+  const rows = devices.filter(row => selected.has(row.id) && row.type !== 'owner' && (action === 'restore' ? row.status !== 'active' : action === 'extend' ? row.status === 'active' && !row.permanent && deviceStatus(row) !== 'revoked' : action === 'revoke' ? row.status === 'active' : true))
   if (!rows.length) { notice('选中的设备没有可执行此操作的记录，请检查状态。', true); return }
   bulkTarget = { action, rows: rows.map(row => ({ ...row })) }
   $('bulk-title').textContent = { extend: '批量延期', policy: '批量权限', revoke: '批量停用', restore: '批量恢复' }[action]
@@ -287,6 +307,11 @@ for (const [value, title] of Object.entries(featureLabels)) { const label = docu
 createOptions.append(features)
 const expiryLabel = document.createElement('label'), expiry = document.createElement('input'); expiryLabel.htmlFor = 'create-expiry'; expiryLabel.textContent = '新设备激活截止（留空不限）'; Object.assign(expiry, { id: 'create-expiry', type: 'datetime-local' }); createOptions.append(expiryLabel, expiry)
 $('create-error').before(createOptions)
+function permanentOption(id, title) { const label = document.createElement('label'), input = document.createElement('input'); label.className = 'check-row'; Object.assign(input, { id, type: 'checkbox' }); label.append(input, title); return label }
+createOptions.before(permanentOption('invite-permanent', '永久使用：不设使用到期日，仍按离线额度核验，可停用'))
+$('invite-permanent').addEventListener('change', () => { $('invite-days').disabled = $('invite-permanent').checked })
+$('create-form').addEventListener('reset', () => { $('invite-days').disabled = false })
+$('policy-invite-fields').prepend(permanentOption('policy-permanent', '新激活设备永久使用；已有设备需单独设为永久'))
 async function restoreSession() {
   if (token) return
   let saved
