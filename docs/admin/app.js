@@ -127,7 +127,7 @@ function render() {
     else action(cell, '恢复', () => restore('invites', invite.id))
   }
   if (!deviceRows.length) empty($('devices-body'), devices.length ? '没有匹配的设备，请调整搜索条件。' : '还没有激活设备。创建邀请码并让朋友激活工作台后，会在这里显示。')
-  if (!inviteRows.length) empty($('invites-body'), invites.length ? '没有匹配的邀请码，请调整搜索条件。' : '还没有邀请码。点击「创建邀请码」发出第一份邀请。')
+  if (!inviteRows.length) empty($('invites-body'), invites.length ? '没有匹配的邀请码，请调整搜索条件。' : '还没有邀请码。点击「新增授权」发出第一份邀请。')
   $('result-count').textContent = `显示 ${activeTab === 'devices' ? deviceRows.length : inviteRows.length} 条`
   updateSelection()
 }

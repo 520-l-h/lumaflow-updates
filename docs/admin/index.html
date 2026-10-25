@@ -33,7 +33,7 @@
       </form>
     </section>
     <section id="console-view" hidden>
-      <div class="page-heading"><div><h1>用户与设备</h1><p>找到对应用户，即可延长使用、设为永久，或停用与恢复。</p></div><div class="heading-actions"><details id="advanced-tools" class="management-tools"><summary>高级管理</summary><div class="management-options"><button id="audit-button">操作记录</button><button id="refresh-button">立即同步</button><p>每 15 分钟联网核验，默认可离线 24 小时。权限变化在下次核验或现有离线授权到期后生效。</p><p>数据更新：<span id="updated-at">尚未加载</span></p></div></details><button id="logout-button" class="quiet">退出管理</button></div></div>
+      <div class="page-heading"><div><h1>用户与设备</h1><p>找到对应用户，即可延长使用、设为永久，或停用与恢复。</p></div><div class="heading-actions"><details id="advanced-tools" class="management-tools"><summary>高级管理</summary><div class="management-options"><button id="audit-button">操作记录</button><button id="refresh-button">立即同步</button><p>每 15 分钟联网核验，默认可离线 24 小时。权限变化在下次核验或现有离线授权到期后生效。</p><p>数据更新：<span id="updated-at">尚未加载</span></p><p>每类列表显示最近 200 条。</p></div></details><button id="logout-button" class="quiet">退出管理</button></div></div>
       <div id="notice" class="notice" role="status" hidden></div>
       <p id="sync-status" role="status" class="sync-status">登录后自动同步，无需刷新页面。</p>
       <dl class="metrics"><div><dt>可用设备</dt><dd id="active-count">—</dd></div><div><dt>7 天内到期</dt><dd id="expiring-count">—</dd></div><div><dt>可用邀请码</dt><dd id="invite-count">—</dd></div></dl>
@@ -42,7 +42,7 @@
       <details id="batch-tools" class="batch-tools"><summary>批量管理</summary><div id="bulk-toolbar" class="bulk-toolbar"><label class="check-row"><input id="select-visible" type="checkbox">选择当前筛选的普通设备</label><span id="selection-count">已选 0 台</span><button id="bulk-extend">批量延期</button><button id="bulk-policy">批量权限</button><button id="bulk-revoke" class="danger">批量停用</button><button id="bulk-restore">批量恢复</button><button id="clear-selection" class="quiet">清空选择</button></div></details>
       <section id="devices-panel" role="tabpanel" aria-labelledby="devices-tab" tabindex="0"><div class="table-scroll"><table><caption class="sr-only">设备授权列表</caption><thead><tr><th>用户 / 设备</th><th>使用状态</th><th>使用期限</th><th>常用操作</th></tr></thead><tbody id="devices-body"></tbody></table></div></section>
       <section id="invites-panel" role="tabpanel" aria-labelledby="invites-tab" tabindex="0" hidden><div class="table-scroll"><table><caption class="sr-only">邀请码列表</caption><thead><tr><th>邀请备注 / 编号</th><th>状态</th><th>使用期限</th><th>已用 / 上限</th><th>创建时间</th><th>管理</th></tr></thead><tbody id="invites-body"></tbody></table></div></section>
-      <p class="table-note">每类列表显示最近 200 条。这里管理的是设备使用资格；邀请码备注可用于辨认用户，不包含同步账号和学习内容。</p>
+      <p class="table-note">按设备管理使用资格，备注用于辨认用户；不包含同步账号和学习内容。</p>
     </section>
   </main>
   <footer><span>序光 LumaFlow</span><span>让学习有序，让进步有光。</span></footer>
