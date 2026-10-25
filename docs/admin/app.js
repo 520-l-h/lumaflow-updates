@@ -28,6 +28,7 @@ function logout(preserveSession = false) {
   $('login-view').hidden = false; $('console-view').hidden = true; $('admin-token').value = ''; $('created-code').value = ''; $('login-error').textContent = ''
   $('devices-body').replaceChildren(); $('invites-body').replaceChildren(); $('search-input').value = ''; $('status-filter').value = 'all'
   $('audit-body').replaceChildren(); $('policy-form').reset()
+  for (const details of document.querySelectorAll('#console-view details')) details.open = false
   for (const dialog of document.querySelectorAll('dialog[open]')) dialog.close()
   busy(false); if (!preserveSession) $('admin-token').focus()
 }
@@ -87,7 +88,7 @@ function textCell(row, value) { const cell = row.insertCell(); cell.textContent 
 function badgeCell(row, status) { const cell = row.insertCell(); const badge = document.createElement('span'); badge.className = `badge ${status}`; badge.textContent = labels[status] ?? status; cell.append(badge) }
 function nameCell(row, title, identifier) { const cell = row.insertCell(); const name = document.createElement('strong'); name.textContent = title; const detail = document.createElement('span'); detail.className = 'identifier'; detail.textContent = identifier; cell.append(name, detail) }
 function action(cell, label, callback, danger = false) { const button = document.createElement('button'); button.type = 'button'; button.textContent = label; if (danger) button.className = 'danger'; button.disabled = pending; button.addEventListener('click', callback); cell.append(button) }
-function empty(tbody, text) { const row = tbody.insertRow(); const cell = row.insertCell(); cell.colSpan = 6; cell.className = 'empty'; cell.textContent = text }
+function empty(tbody, text) { const row = tbody.insertRow(); const cell = row.insertCell(); cell.colSpan = tbody.closest('table').tHead.rows[0].cells.length; cell.className = 'empty'; cell.textContent = text }
 function render() {
   const counts = devices.map(deviceStatus)
   $('active-count').textContent = counts.filter(status => status === 'active' || status === 'expiring').length
@@ -100,25 +101,25 @@ function render() {
   $('devices-body').replaceChildren(); $('invites-body').replaceChildren()
   for (const device of deviceRows) {
     const row = $('devices-body').insertRow(), status = deviceStatus(device)
-    nameCell(row, device.note || inviteFor(device)?.note || '未备注的设备', device.installation_id)
+    row.dataset.installationId = device.installation_id
+    nameCell(row, device.note || inviteFor(device)?.note || '未备注的设备', `设备尾号 ${device.installation_id.slice(-6)}`)
     if (device.type !== 'owner') { const input = document.createElement('input'); input.type = 'checkbox'; input.className = 'device-select'; input.dataset.deviceId = device.id; input.checked = selected.has(device.id); input.disabled = pending; input.setAttribute('aria-label', `选择设备 ${device.note || inviteFor(device)?.note || device.installation_id}`); input.addEventListener('change', () => { input.checked ? selected.add(device.id) : selected.delete(device.id); updateSelection() }); row.cells[0].prepend(input) }
-    const detail = document.createElement('span'); detail.className = 'policy-summary'; detail.textContent = device.type === 'owner' ? '全部功能 · 离线不限时' : policyText(device.policy ?? defaultPolicy()); row.cells[0].append(detail)
     if (device.protocol_version === 1) { const warning = document.createElement('span'); warning.className = 'policy-summary legacy'; warning.textContent = '旧版客户端 · 请升级以执行新权限规则'; row.cells[0].append(warning) }
-    badgeCell(row, status); textCell(row, device.type === 'owner' ? '机主 · 永久' : device.permanent ? '永久授权' : '朋友测试'); textCell(row, device.type === 'owner' || device.permanent ? '永久有效' : date(device.expires_at)); textCell(row, date(device.last_verified_at))
+    badgeCell(row, status)
+    if (device.type !== 'owner' && (device.invite_status ?? inviteFor(device)?.status) === 'revoked') { const reason = document.createElement('span'); reason.className = 'policy-summary'; reason.textContent = '邀请码已停用'; row.cells[1].append(reason) }
+    textCell(row, device.type === 'owner' ? '机主 · 永久' : device.permanent ? '永久使用' : date(device.expires_at))
     const cell = row.insertCell(); cell.className = 'row-actions'
-    action(cell, '详情', () => openDevice(device))
-    if (device.status === 'active' && status !== 'revoked' && device.type !== 'owner' && !device.permanent) action(cell, '延期', () => openExtend(device))
+    if (device.status === 'active' && status !== 'revoked' && device.type !== 'owner' && !device.permanent) action(cell, '延长使用', () => openExtend(device))
     if (device.type !== 'owner') {
       if (!device.permanent && device.status === 'active' && status !== 'revoked') action(cell, '设为永久', () => grantPermanent(device))
-      action(cell, '权限', () => openPolicy('entitlements', device))
       if (device.status === 'active') action(cell, '停用', () => revoke('entitlements', device.id, device.note || inviteFor(device)?.note || device.installation_id), true)
       else action(cell, '恢复', () => restore('entitlements', device.id))
     } else cell.append(document.createTextNode('机主保护'))
+    action(cell, '更多', () => openDevice(device))
   }
   for (const invite of inviteRows) {
     const row = $('invites-body').insertRow()
     nameCell(row, invite.note || '未备注的邀请', invite.id); badgeCell(row, inviteStatus(invite)); textCell(row, invite.permanent ? '永久使用' : `${invite.duration_days} 天`); textCell(row, `${invite.activation_count} / ${invite.max_activations}`); textCell(row, date(invite.created_at))
-    const detail = document.createElement('span'); detail.className = 'policy-summary'; detail.textContent = `${policyText(invite.policy ?? defaultPolicy())} · 激活截止：${invite.activation_expires_at ? date(invite.activation_expires_at) : '不限'}`; row.cells[0].append(detail)
     const cell = row.insertCell()
     action(cell, '设置', () => openPolicy('invites', invite))
     action(cell, '查看设备', () => { $('search-input').value = invite.id; $('status-filter').value = 'all'; switchTab('devices') })
@@ -199,7 +200,7 @@ function switchTab(tab) {
   for (const option of $('status-filter').options) option.disabled = tab === 'invites' && option.value === 'expiring'
   if ($('status-filter').selectedOptions[0].disabled) $('status-filter').value = 'all'
   render()
-  $('bulk-toolbar').hidden = tab !== 'devices'
+  $('batch-tools').hidden = tab !== 'devices'
 }
 $('login-form').addEventListener('submit', async event => {
   event.preventDefault(); if ($('login-button').disabled) return
@@ -213,7 +214,10 @@ $('refresh-button').addEventListener('click', async () => { if (pending) return;
 $('devices-tab').addEventListener('click', () => switchTab('devices')); $('invites-tab').addEventListener('click', () => switchTab('invites'))
 document.querySelector('.tabs').addEventListener('keydown', event => { if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const tab = event.key === 'Home' ? 'devices' : event.key === 'End' ? 'invites' : activeTab === 'devices' ? 'invites' : 'devices'; switchTab(tab); $(`${tab}-tab`).focus() } })
 $('search-input').addEventListener('input', render); $('status-filter').addEventListener('change', render)
-$('new-invite-button').addEventListener('click', () => { $('create-form').reset(); $('create-error').textContent = ''; $('create-dialog').showModal() })
+$('new-invite-button').addEventListener('click', () => { $('create-form').reset(); $('create-advanced').open = false; $('create-error').textContent = ''; $('create-dialog').showModal() })
+$('create-form').addEventListener('invalid', event => { if ($('create-advanced').contains(event.target)) $('create-advanced').open = true }, true)
+document.addEventListener('click', event => { if (!$('advanced-tools').contains(event.target) || event.target.closest('button')) $('advanced-tools').open = false })
+document.addEventListener('keydown', event => { if (event.key === 'Escape' && $('advanced-tools').open) { $('advanced-tools').open = false; $('advanced-tools').querySelector('summary').focus() } })
 $('create-form').addEventListener('submit', async event => {
   event.preventDefault(); if (pending) return
   const current = generation, note = $('invite-note').value.trim(); if (!note) { $('create-error').textContent = '请输入用户备注。'; return }
@@ -244,10 +248,12 @@ setInterval(() => { void synchronize() }, 5000)
 function updateSelection() {
   $('selection-count').textContent = `已选 ${selected.size} 台`
   const visible = [...document.querySelectorAll('#devices-body .device-select')]
+  for (const input of visible) input.hidden = !$('batch-tools').open
   $('select-visible').checked = visible.length > 0 && visible.every(input => selected.has(input.dataset.deviceId))
   $('select-visible').indeterminate = visible.some(input => selected.has(input.dataset.deviceId)) && !$('select-visible').checked
   for (const id of ['bulk-extend', 'bulk-policy', 'bulk-revoke', 'bulk-restore', 'clear-selection']) $(id).disabled = pending || !selected.size
 }
+$('batch-tools').addEventListener('toggle', () => { if (!$('batch-tools').open) { selected.clear(); for (const input of document.querySelectorAll('.device-select')) input.checked = false } updateSelection() })
 $('select-visible').addEventListener('change', event => { for (const input of document.querySelectorAll('#devices-body .device-select')) { event.target.checked ? selected.add(input.dataset.deviceId) : selected.delete(input.dataset.deviceId); input.checked = event.target.checked } updateSelection() })
 $('clear-selection').addEventListener('click', () => { selected.clear(); render() })
 function openDevice(device) {
@@ -256,6 +262,8 @@ function openDevice(device) {
   for (const [label, value] of [['设备编号', device.installation_id], ['授权编号', device.id], ['备注', device.note || invite?.note || '未备注'], ['状态', labels[deviceStatus(device)]], ['使用到期', device.type === 'owner' ? '机主永久有效' : device.permanent ? '永久使用（可停用）' : date(device.expires_at)], ['最近联网核验', date(device.last_verified_at)], ['权限来源', device.type === 'owner' ? '机主保护' : device.policyInherited === false ? '单设备设置' : '跟随邀请码'], ['下次核验领取', device.type === 'owner' ? '全部功能，离线不限时' : policyText(policy)], ['关联邀请', invite?.note || device.invite_id], ['客户端协议', device.protocol_version === 2 ? '支持当前权限规则' : '旧协议或未记录，请先更新客户端']]) {
     const term = document.createElement('dt'), detail = document.createElement('dd'); term.textContent = label; detail.textContent = value; $('device-details').append(term, detail)
   }
+  $('device-policy-button').hidden = device.type === 'owner'
+  $('device-policy-button').onclick = () => { $('device-dialog').close(); openPolicy('entitlements', device) }
   $('device-dialog').showModal()
 }
 function openBulk(action) {
@@ -306,9 +314,9 @@ const features = document.createElement('div'); features.id = 'create-features'
 for (const [value, title] of Object.entries(featureLabels)) { const label = document.createElement('label'), input = document.createElement('input'); label.className = 'check-row'; Object.assign(input, { type: 'checkbox', value, checked: true, defaultChecked: true }); label.append(input, title); features.append(label) }
 createOptions.append(features)
 const expiryLabel = document.createElement('label'), expiry = document.createElement('input'); expiryLabel.htmlFor = 'create-expiry'; expiryLabel.textContent = '新设备激活截止（留空不限）'; Object.assign(expiry, { id: 'create-expiry', type: 'datetime-local' }); createOptions.append(expiryLabel, expiry)
-$('create-error').before(createOptions)
+$('create-options').append(createOptions)
 function permanentOption(id, title) { const label = document.createElement('label'), input = document.createElement('input'); label.className = 'check-row'; Object.assign(input, { id, type: 'checkbox' }); label.append(input, title); return label }
-createOptions.before(permanentOption('invite-permanent', '永久使用：不设使用到期日，仍按离线额度核验，可停用'))
+$('invite-term').after(permanentOption('invite-permanent', '永久使用（可随时停用）'))
 $('invite-permanent').addEventListener('change', () => { $('invite-days').disabled = $('invite-permanent').checked })
 $('create-form').addEventListener('reset', () => { $('invite-days').disabled = false })
 $('policy-invite-fields').prepend(permanentOption('policy-permanent', '新激活设备永久使用；已有设备需单独设为永久'))
