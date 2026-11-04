@@ -1,5 +1,5 @@
-self.__MW_BUILD_ID="eeb8eb6042547b89";
-self.__MW_PRECACHE=["./index.html","./manifest.webmanifest","./favicon-32.png","./apple-touch-icon.png","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./assets/index-WJWCCLO6.css","./assets/index-up5Vum4O.js","./assets/spring-B7B6llIs.webp","./assets/xlsx-rtMNn567.js"];
+self.__MW_BUILD_ID="f96dd2d33bd00d75";
+self.__MW_PRECACHE=["./index.html","./manifest.webmanifest","./favicon-32.png","./apple-touch-icon.png","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./assets/index-CLhRNXof.css","./assets/index-CeoNlsGK.js","./assets/spring-B7B6llIs.webp","./assets/xlsx-rtMNn567.js"];
 const PREFIX = 'medworkbench-mobile-';
 const CACHE = PREFIX + (self.__MW_BUILD_ID || 'development');
 const APP_SHELL = self.__MW_PRECACHE || ['./index.html', './manifest.webmanifest', './favicon-32.png', './apple-touch-icon.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
@@ -21,7 +21,10 @@ async function navigation(request) {
 
 async function asset(request) {
   const cache = await caches.open(CACHE);
-  return await cache.match(request) || fetch(request);
+  // Only public, same-origin app-shell assets reach here. Some static hosts add
+  // Vary: Origin; module/CSS requests include Origin while install-time fetches
+  // do not. They must still use the same pinned build when the device is offline.
+  return await cache.match(request, { ignoreVary: true }) || fetch(request);
 }
 
 self.addEventListener('fetch', event => {
