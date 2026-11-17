@@ -1,5 +1,5 @@
-self.__MW_BUILD_ID="f96dd2d33bd00d75";
-self.__MW_PRECACHE=["./index.html","./manifest.webmanifest","./favicon-32.png","./apple-touch-icon.png","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./assets/index-CLhRNXof.css","./assets/index-CeoNlsGK.js","./assets/spring-B7B6llIs.webp","./assets/xlsx-rtMNn567.js"];
+self.__MW_BUILD_ID="bb258fa0bbebacf0";
+self.__MW_PRECACHE=["./index.html","./manifest.webmanifest","./favicon-32.png","./apple-touch-icon.png","./icon-192.png","./icon-512.png","./icon-maskable-512.png","./assets/index-Bs8QYVuE.js","./assets/index-dDU_XT2N.css","./assets/spring-B7B6llIs.webp","./assets/xlsx-rtMNn567.js"];
 const PREFIX = 'medworkbench-mobile-';
 const CACHE = PREFIX + (self.__MW_BUILD_ID || 'development');
 const APP_SHELL = self.__MW_PRECACHE || ['./index.html', './manifest.webmanifest', './favicon-32.png', './apple-touch-icon.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
